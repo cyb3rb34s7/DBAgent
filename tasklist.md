@@ -351,9 +351,7 @@ Agent Architecture
 
 P1.T3
 
-PENDING
-
-
+DONE
 
 P2.T2.1
 
@@ -363,9 +361,7 @@ Query Builder Agent
 
 -
 
-PENDING
-
-
+DONE
 
 P2.T2.2
 
@@ -375,9 +371,7 @@ build_sql_query
 
 P2.T1.2
 
-PENDING
-
-
+DONE
 
 P2.T2.3
 
@@ -387,9 +381,7 @@ validate_query
 
 -
 
-PENDING
-
-
+DONE
 
 P2.T3
 
@@ -399,9 +391,9 @@ System Workflow
 
 P1.T5, P2.T1, P2.T2
 
-PENDING
+DONE
 
-
+Enhanced orchestrator with Gemini AI integration, updated LangGraph workflow with 4-node pipeline, and comprehensive state management. Tested successfully with natural language queries.
 
 P2.T3.1
 
@@ -411,9 +403,9 @@ extract_intent
 
 P1.T3.2
 
-PENDING
+DONE
 
-
+Orchestrator updated to use Gemini AI for intent extraction with fallback to static rules. Produces structured JSON with intent, confidence, keywords, table_mentioned, and operation_type.
 
 P2.T3.2
 
@@ -423,9 +415,9 @@ SELECT Query Flow
 
 P1.T5.3, P2.T3.1
 
-PENDING
+DONE
 
-
+LangGraph workflow enhanced with 4-node pipeline: fetch_schema -> build_query -> validate_query -> execute_query. Complete end-to-end processing from natural language to SQL execution.
 
 P2.T3.3
 
@@ -435,9 +427,9 @@ Implement state management within the graph to pass the schema, intent, and gene
 
 P2.T3.2
 
-PENDING
+DONE
 
-
+Enhanced SelectQueryState with schema_context, validation_result, metadata fields. Comprehensive state management implemented with error propagation and execution statistics.
 
 PHASE 3: Safety & Approval (Week 5-6)
 Goal: Implement the safety layer for destructive operations (UPDATE, DELETE, INSERT) including impact analysis and a human approval workflow.
