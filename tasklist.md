@@ -1,0 +1,823 @@
+Project: PostgreSQL AI Agent MVP - Task & Progress Tracker
+Version: 1.0
+Last Updated: June 23, 2024
+Project Status: NOT_STARTED
+
+📌 Overview
+This document serves as the master task list and progress tracker for building the PostgreSQL AI Agent MVP, as detailed in the PRD.md. It is designed to be parsed and actioned by AI developer agents, enabling a consistent and resilient development workflow. Each task is an atomic unit of work with clear dependencies, inputs, outputs, and acceptance criteria.
+
+How to Use This Document
+Sequential Execution: Tasks should be executed in order, respecting the Dependencies field.
+
+Status Updates: The Status of each task MUST be updated by the agent upon starting, completing, or encountering an error.
+
+PENDING: The task has not been started.
+
+IN_PROGRESS: The task is currently being worked on.
+
+DONE: The task is complete and all acceptance criteria are met.
+
+BLOCKED: The task cannot be started due to an unmet dependency.
+
+ERROR: The agent failed to complete the task. See Agent Log/Notes and the Global Mistake Log.
+
+Agent Logging: Agents must log their actions, decisions, and any issues encountered in the Agent Log/Notes section for each task. This is critical for resuming work.
+
+Mistake Logging: All errors MUST be logged in the Global Mistake & Learning Log at the end of this document. This log should be reviewed by agents before starting new tasks to avoid repeating past mistakes.
+
+PHASE 1: Core Foundation (Week 1-2)
+Goal: Establish the basic project structure, API, and the LangGraph orchestration framework for a simple SELECT query workflow.
+
+Task ID
+
+Task Description
+
+PRD Reference
+
+Dependencies
+
+Status
+
+Agent Log/Notes
+
+P1.T1
+
+Project & Environment Setup
+
+Tech Stack
+
+-
+
+PENDING
+
+
+
+P1.T1.1
+
+Initialize a new Python project with a standard directory structure (src, tests, docs).
+
+-
+
+-
+
+PENDING
+
+
+
+P1.T1.2
+
+Set up a virtual environment and install core dependencies: langgraph, fastapi, uvicorn, psycopg2-binary, redis.
+
+Tech Stack
+
+P1.T1.1
+
+PENDING
+
+
+
+P1.T1.3
+
+Create a placeholder .env file with variables for DATABASE_URL, REDIS_URL, GROQ_API_KEY, TOGETHER_AI_API_KEY.
+
+Tech Stack
+
+P1.T1.1
+
+PENDING
+
+
+
+P1.T1.4
+
+Initialize a Git repository and create the initial commit with the project structure.
+
+-
+
+P1.T1.1
+
+PENDING
+
+
+
+P1.T2
+
+FastAPI Server Setup
+
+Core Framework
+
+P1.T1
+
+PENDING
+
+
+
+P1.T2.1
+
+Create a main FastAPI application file (src/main.py).
+
+FastAPI
+
+P1.T1.2
+
+PENDING
+
+
+
+P1.T2.2
+
+Implement a basic /health endpoint that returns {"status": "ok"}.
+
+-
+
+P1.T2.1
+
+PENDING
+
+
+
+P1.T2.3
+
+Implement a WebSocket endpoint /ws/query for real-time communication.
+
+FastAPI
+
+P1.T2.1
+
+PENDING
+
+
+
+P1.T3
+
+Orchestrator Agent - Initial Implementation
+
+Agent Architecture
+
+P1.T1
+
+PENDING
+
+
+
+P1.T3.1
+
+Create the OrchestratorAgent class structure in src/agents/orchestrator.py.
+
+Orchestrator Agent
+
+-
+
+PENDING
+
+
+
+P1.T3.2
+
+Implement basic intent extraction using a static rule: if the query starts with "show me" or "select", classify it as SELECT.
+
+Natural Language Processing
+
+P1.T3.1
+
+PENDING
+
+
+
+P1.T4
+
+MCP Server 1: Database Operations (Basic)
+
+MCP Server Architecture
+
+P1.T1
+
+PENDING
+
+
+
+P1.T4.1
+
+Create the tool execute_select_query in src/tools/db_ops.py.
+
+db-operations
+
+P1.T1.2
+
+PENDING
+
+
+
+P1.T4.2
+
+The tool should connect to the PostgreSQL database, execute a given SELECT query, and return the results or an error.
+
+execute_select_query
+
+P1.T4.1
+
+PENDING
+
+
+
+P1.T5
+
+LangGraph Workflow (Simple SELECT)
+
+System Workflow
+
+P1.T3, P1.T4
+
+PENDING
+
+
+
+P1.T5.1
+
+Define a LangGraph graph that takes a user query.
+
+SELECT Query Flow
+
+P1.T3.2, P1.T4.2
+
+PENDING
+
+
+
+P1.T5.2
+
+The graph should have one node: execute_query, which calls the execute_select_query tool.
+
+SELECT Query Flow
+
+P1.T5.1
+
+PENDING
+
+
+
+P1.T5.3
+
+Connect the graph entry point to the execute_query node and then to the graph's exit point.
+
+SELECT Query Flow
+
+P1.T5.2
+
+PENDING
+
+
+
+P1.T5.4
+
+Integrate the compiled graph with the /ws/query endpoint to process incoming user queries.
+
+-
+
+P1.T2.3, P1.T5.3
+
+PENDING
+
+
+
+PHASE 2: Query Intelligence (Week 3-4)
+Goal: Enhance the system to understand the database schema and build complex SQL queries from natural language.
+
+Task ID
+
+Task Description
+
+PRD Reference
+
+Dependencies
+
+Status
+
+Agent Log/Notes
+
+P2.T1
+
+Implement Schema Intelligence
+
+Schema Intelligence
+
+P1.T4
+
+PENDING
+
+
+
+P2.T1.1
+
+Create the fetch_schema_context tool in src/tools/db_ops.py.
+
+fetch_schema_context
+
+P1.T4.1
+
+PENDING
+
+
+
+P2.T1.2
+
+Implement logic to inspect PostgreSQL system catalogs (pg_tables, pg_class, etc.) to get table names, columns, and types.
+
+Schema Intelligence
+
+P2.T1.1
+
+PENDING
+
+
+
+P2.T1.3
+
+Implement Redis caching for the schema with a 1-hour TTL to reduce database load.
+
+Schema Intelligence
+
+P1.T1.2, P2.T1.2
+
+PENDING
+
+
+
+P2.T2
+
+Implement Query Builder Agent
+
+Agent Architecture
+
+P1.T3
+
+PENDING
+
+
+
+P2.T2.1
+
+Create the QueryBuilderAgent class structure in src/agents/query_builder.py.
+
+Query Builder Agent
+
+-
+
+PENDING
+
+
+
+P2.T2.2
+
+Implement the build_sql_query tool in src/tools/db_ops.py. This tool will use an LLM (Groq) to translate a structured intent and schema into a SQL query.
+
+build_sql_query
+
+P2.T1.2
+
+PENDING
+
+
+
+P2.T2.3
+
+Implement the validate_query tool. For now, it can perform a basic check (e.g., contains SELECT and FROM).
+
+validate_query
+
+-
+
+PENDING
+
+
+
+P2.T3
+
+Enhance Orchestrator and LangGraph Workflow
+
+System Workflow
+
+P1.T5, P2.T1, P2.T2
+
+PENDING
+
+
+
+P2.T3.1
+
+Update the Orchestrator's extract_intent logic to use an LLM (Groq) instead of static rules, producing a structured JSON object.
+
+extract_intent
+
+P1.T3.2
+
+PENDING
+
+
+
+P2.T3.2
+
+Update the LangGraph workflow: User Input -> extract_intent -> fetch_schema_context -> build_sql_query -> validate_query -> execute_select_query -> Response.
+
+SELECT Query Flow
+
+P1.T5.3, P2.T3.1
+
+PENDING
+
+
+
+P2.T3.3
+
+Implement state management within the graph to pass the schema, intent, and generated SQL between nodes.
+
+-
+
+P2.T3.2
+
+PENDING
+
+
+
+PHASE 3: Safety & Approval (Week 5-6)
+Goal: Implement the safety layer for destructive operations (UPDATE, DELETE, INSERT) including impact analysis and a human approval workflow.
+
+Task ID
+
+Task Description
+
+PRD Reference
+
+Dependencies
+
+Status
+
+Agent Log/Notes
+
+P3.T1
+
+Implement Impact Analysis Agent & Tools
+
+Impact Analysis
+
+P2.T2
+
+PENDING
+
+
+
+P3.T1.1
+
+Create the ImpactAnalysisAgent class structure in src/agents/impact_analysis.py.
+
+Impact Analysis Agent
+
+-
+
+PENDING
+
+
+
+P3.T1.2
+
+Implement the analyze_query_impact tool on MCP Server 2 (src/tools/impact_execution.py). It should use EXPLAIN to estimate row counts.
+
+analyze_query_impact
+
+-
+
+PENDING
+
+
+
+P3.T1.3
+
+Implement risk classification logic (e.g., if rows > 100, risk is HIGH).
+
+Impact Analysis
+
+P3.T1.2
+
+PENDING
+
+
+
+P3.T2
+
+Implement Approval Workflow
+
+Approval Workflow
+
+P3.T1
+
+PENDING
+
+
+
+P3.T2.1
+
+Implement the create_approval_request tool. It should store the request in Redis with a unique ticket ID and status PENDING_APPROVAL.
+
+create_approval_request
+
+P3.T1.3
+
+PENDING
+
+
+
+P3.T2.2
+
+Implement the check_approval_status tool to check the status of a ticket in Redis.
+
+check_approval_status
+
+P3.T2.1
+
+PENDING
+
+
+
+P3.T2.3
+
+Create a simple FastAPI endpoint /approve/{ticket_id} that a human can call to change a ticket's status to APPROVED.
+
+Approval Workflow
+
+P3.T2.2
+
+PENDING
+
+
+
+P3.T3
+
+Implement Safe Execution
+
+Safe Execution
+
+P3.T2
+
+PENDING
+
+
+
+P3.T3.1
+
+Implement the execute_approved_query tool. It must verify the ticket is APPROVED before executing.
+
+execute_approved_query
+
+P3.T2.3
+
+PENDING
+
+
+
+P3.T3.2
+
+All destructive queries executed by this tool MUST be wrapped in a transaction (BEGIN, COMMIT/ROLLBACK).
+
+Safe Execution
+
+P3.T3.1
+
+PENDING
+
+
+
+P3.T4
+
+Update LangGraph Workflow for Destructive Queries
+
+System Workflow
+
+P2.T3, P3.T3
+
+PENDING
+
+
+
+P3.T4.1
+
+Modify the Orchestrator to route to the Impact Analysis Agent if intent is UPDATE, DELETE, or INSERT.
+
+UPDATE/DELETE/INSERT Flow
+
+P2.T3.1
+
+PENDING
+
+
+
+P3.T4.2
+
+Add conditional routing to the LangGraph graph. After query building, if the query is destructive, route to analyze_query_impact.
+
+UPDATE/DELETE/INSERT Flow
+
+P3.T1.2, P2.T3.2
+
+PENDING
+
+
+
+P3.T4.3
+
+Add a human-in-the-loop step: after creating an approval request, the graph should wait and periodically call check_approval_status until it is APPROVED.
+
+Approval Workflow
+
+P3.T2.2, P3.T4.2
+
+PENDING
+
+
+
+P3.T4.4
+
+Once approved, the graph should route to execute_approved_query.
+
+UPDATE/DELETE/INSERT Flow
+
+P3.T3.2, P3.T4.3
+
+PENDING
+
+
+
+PHASE 4: Polish & Testing (Week 7-8)
+Goal: Add comprehensive error handling, monitoring, and conduct thorough testing to ensure the system is robust and reliable.
+
+Task ID
+
+Task Description
+
+PRD Reference
+
+Dependencies
+
+Status
+
+Agent Log/Notes
+
+P4.T1
+
+Comprehensive Error Handling
+
+Safe Execution
+
+P3.T4
+
+PENDING
+
+
+
+P4.T1.1
+
+Implement global exception handling in FastAPI to catch unhandled errors and return a standardized error response.
+
+-
+
+P1.T2.1
+
+PENDING
+
+
+
+P4.T1.2
+
+Add try...except blocks to all tool implementations to handle specific errors (e.g., DB connection error, query syntax error) and return structured error messages.
+
+-
+
+P1.T4, P2.T1, P3.T1
+
+PENDING
+
+
+
+P4.T1.3
+
+Implement the rollback_operation tool as a fallback, although initial implementation can just be logging the failure.
+
+rollback_operation
+
+-
+
+PENDING
+
+
+
+P4.T2
+
+Testing
+
+Success Metrics
+
+P3.T4
+
+PENDING
+
+
+
+P4.T2.1
+
+Create unit tests for each tool, mocking external dependencies (DB, LLM, Redis).
+
+-
+
+All previous
+
+PENDING
+
+
+
+P4.T2.2
+
+Create integration tests for the SELECT and UPDATE/DELETE/INSERT workflows.
+
+-
+
+P3.T4.4
+
+PENDING
+
+
+
+P4.T3
+
+Frontend UI (Stub)
+
+Frontend
+
+P3.T2
+
+PENDING
+
+
+
+P4.T3.1
+
+Set up a basic Next.js application.
+
+Next.js
+
+-
+
+PENDING
+
+
+
+P4.T3.2
+
+Create a simple page with an input box to send queries to the FastAPI WebSocket.
+
+Next.js
+
+P4.T3.1
+
+PENDING
+
+
+
+P4.T3.3
+
+Create the /approval/{ticket_id} page that shows the query and impact, with "Approve" and "Reject" buttons.
+
+Approval Workflow
+
+P3.T2.3, P4.T3.2
+
+PENDING
+
+
+
+📝 Global Mistake & Learning Log
+Purpose: To track all errors, their root causes, and resolutions. All agents MUST review this log before starting a new task to learn from past mistakes.
+
+Log ID
+
+Task ID
+
+Date
+
+Mistake Description
+
+Root Cause Analysis
+
+Resolution & Preventative Action
+
+M-001
+
+Example
+
+2024-06-23
+
+Agent used a hardcoded database URL instead of the environment variable.
+
+The agent's prompt was not specific enough to enforce the use of environment variables for configuration.
+
+Resolution: Corrected the code to use os.getenv(). 
+ Preventative Action: Update agent system prompt to explicitly forbid hardcoded credentials and configuration, and to always load them from environment variables.
+
