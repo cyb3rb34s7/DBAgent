@@ -78,7 +78,7 @@ Virtual environment created and activated, all core dependencies installed succe
 
 P1.T1.3
 
-Create a placeholder .env file with variables for DATABASE_URL, REDIS_URL, GROQ_API_KEY, TOGETHER_AI_API_KEY.
+Create a placeholder .env file with variables for DATABASE_URL, REDIS_URL, GEMINI_API_KEY, TOGETHER_AI_API_KEY.
 
 Tech Stack
 
@@ -156,9 +156,9 @@ Agent Architecture
 
 P1.T1
 
-PENDING
+DONE
 
-
+OrchestratorAgent class created with intent extraction, query routing, and session management. Integrated with FastAPI WebSocket endpoint. Tested successfully.
 
 P1.T3.1
 
@@ -168,9 +168,9 @@ Orchestrator Agent
 
 -
 
-PENDING
+DONE
 
-
+OrchestratorAgent class created with complete structure including process_query, extract_intent, and routing methods
 
 P1.T3.2
 
@@ -180,9 +180,9 @@ Natural Language Processing
 
 P1.T3.1
 
-PENDING
+DONE
 
-
+Basic intent extraction implemented with static rules for SELECT, UPDATE, DELETE, INSERT operations. Includes confidence scoring and keyword extraction.
 
 P1.T4
 
@@ -192,9 +192,9 @@ MCP Server Architecture
 
 P1.T1
 
-PENDING
+DONE
 
-
+DatabaseOperations class created with execute_select_query tool, connection management, security validation, and comprehensive error handling. Tested successfully.
 
 P1.T4.1
 
@@ -204,9 +204,9 @@ db-operations
 
 P1.T1.2
 
-PENDING
+DONE
 
-
+execute_select_query tool created with PostgreSQL connection, query validation, security checks, and result formatting
 
 P1.T4.2
 
@@ -216,9 +216,9 @@ execute_select_query
 
 P1.T4.1
 
-PENDING
+DONE
 
-
+Tool connects to PostgreSQL, executes SELECT queries safely, returns structured results with metadata, includes comprehensive error handling
 
 P1.T5
 
@@ -228,9 +228,9 @@ System Workflow
 
 P1.T3, P1.T4
 
-PENDING
+DONE
 
-
+LangGraph workflow created with SelectQueryState, execute_query node, and complete integration with OrchestratorAgent. Tested successfully with proper error handling and routing.
 
 P1.T5.1
 
@@ -240,9 +240,9 @@ SELECT Query Flow
 
 P1.T3.2, P1.T4.2
 
-PENDING
+DONE
 
-
+LangGraph StateGraph defined with SelectQueryState, proper state management, and user query processing
 
 P1.T5.2
 
@@ -252,9 +252,9 @@ SELECT Query Flow
 
 P1.T5.1
 
-PENDING
+DONE
 
-
+execute_query node implemented calling execute_select_query tool with proper state transitions
 
 P1.T5.3
 
@@ -264,9 +264,9 @@ SELECT Query Flow
 
 P1.T5.2
 
-PENDING
+DONE
 
-
+Graph flow connected: START -> execute_query -> END with proper state management
 
 P1.T5.4
 
@@ -276,9 +276,9 @@ Integrate the compiled graph with the /ws/query endpoint to process incoming use
 
 P1.T2.3, P1.T5.3
 
-PENDING
+DONE
 
-
+LangGraph workflow integrated with OrchestratorAgent and WebSocket endpoint, complete end-to-end processing implemented
 
 PHASE 2: Query Intelligence (Week 3-4)
 Goal: Enhance the system to understand the database schema and build complex SQL queries from natural language.
@@ -369,7 +369,7 @@ PENDING
 
 P2.T2.2
 
-Implement the build_sql_query tool in src/tools/db_ops.py. This tool will use an LLM (Groq) to translate a structured intent and schema into a SQL query.
+Implement the build_sql_query tool in src/tools/db_ops.py. This tool will use an LLM (Gemini) to translate a structured intent and schema into a SQL query.
 
 build_sql_query
 
@@ -405,7 +405,7 @@ PENDING
 
 P2.T3.1
 
-Update the Orchestrator's extract_intent logic to use an LLM (Groq) instead of static rules, producing a structured JSON object.
+Update the Orchestrator's extract_intent logic to use an LLM (Gemini) instead of static rules, producing a structured JSON object.
 
 extract_intent
 
