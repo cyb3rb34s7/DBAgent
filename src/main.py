@@ -17,6 +17,9 @@ load_dotenv()
 # Import our agents
 from agents.orchestrator import OrchestratorAgent
 
+# Import approval workflow tools
+from tools.impact_execution import update_approval_status, check_approval_status
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,6 +63,175 @@ app.add_middleware(
 async def health_check() -> Dict[str, str]:
     """Health check endpoint"""
     return {"status": "ok"}
+
+# Approval workflow endpoints
+@app.get("/approve/{ticket_id}")
+async def approve_request(ticket_id: str, approver: str = "unknown", comments: str = None) -> Dict[str, Any]:
+    """
+    Approve a destructive query request
+    
+    Args:
+        ticket_id: Unique ticket identifier
+        approver: Name or ID of the approver (query parameter)
+        comments: Optional approval comments (query parameter)
+        
+    Returns:
+        Dict containing approval results
+    """
+    try:
+        logger.info(f"Processing approval for ticket: {ticket_id}")
+        
+        # Check if ticket exists first
+        status_check = await check_approval_status(ticket_id)
+        if status_check.get("status") != "found":
+            return {
+                "status": "error",
+                "message": status_check.get("message", "Ticket not found"),
+                "ticket_id": ticket_id
+            }
+        
+        # Update status to APPROVED
+        approver_info = {
+            "approver_id": approver,
+            "approval_method": "web_endpoint",
+            "ip_address": "unknown"  # In production, get from request
+        }
+        
+        result = await update_approval_status(
+            ticket_id, 
+            "APPROVED", 
+            approver_info, 
+            comments
+        )
+        
+        if result.get("status") == "success":
+            logger.info(f"Ticket {ticket_id} approved by {approver}")
+            return {
+                "status": "success",
+                "message": f"Request approved successfully",
+                "ticket_id": ticket_id,
+                "approver": approver,
+                "approval_details": result
+            }
+        else:
+            return {
+                "status": "error",
+                "message": result.get("message", "Failed to approve request"),
+                "ticket_id": ticket_id
+            }
+            
+    except Exception as e:
+        logger.error(f"Error processing approval: {e}")
+        return {
+            "status": "error",
+            "message": f"Approval processing failed: {str(e)}",
+            "ticket_id": ticket_id
+        }
+
+@app.get("/reject/{ticket_id}")
+async def reject_request(ticket_id: str, approver: str = "unknown", comments: str = None) -> Dict[str, Any]:
+    """
+    Reject a destructive query request
+    
+    Args:
+        ticket_id: Unique ticket identifier
+        approver: Name or ID of the approver (query parameter)
+        comments: Optional rejection comments (query parameter)
+        
+    Returns:
+        Dict containing rejection results
+    """
+    try:
+        logger.info(f"Processing rejection for ticket: {ticket_id}")
+        
+        # Check if ticket exists first
+        status_check = await check_approval_status(ticket_id)
+        if status_check.get("status") != "found":
+            return {
+                "status": "error",
+                "message": status_check.get("message", "Ticket not found"),
+                "ticket_id": ticket_id
+            }
+        
+        # Update status to REJECTED
+        approver_info = {
+            "approver_id": approver,
+            "approval_method": "web_endpoint",
+            "ip_address": "unknown"  # In production, get from request
+        }
+        
+        result = await update_approval_status(
+            ticket_id, 
+            "REJECTED", 
+            approver_info, 
+            comments
+        )
+        
+        if result.get("status") == "success":
+            logger.info(f"Ticket {ticket_id} rejected by {approver}")
+            return {
+                "status": "success",
+                "message": f"Request rejected successfully",
+                "ticket_id": ticket_id,
+                "approver": approver,
+                "rejection_details": result
+            }
+        else:
+            return {
+                "status": "error",
+                "message": result.get("message", "Failed to reject request"),
+                "ticket_id": ticket_id
+            }
+            
+    except Exception as e:
+        logger.error(f"Error processing rejection: {e}")
+        return {
+            "status": "error",
+            "message": f"Rejection processing failed: {str(e)}",
+            "ticket_id": ticket_id
+        }
+
+@app.get("/status/{ticket_id}")
+async def get_ticket_status(ticket_id: str) -> Dict[str, Any]:
+    """
+    Get the status of an approval request
+    
+    Args:
+        ticket_id: Unique ticket identifier
+        
+    Returns:
+        Dict containing ticket status and details
+    """
+    try:
+        logger.info(f"Getting status for ticket: {ticket_id}")
+        
+        result = await check_approval_status(ticket_id)
+        
+        if result.get("status") == "found":
+            return {
+                "status": "success",
+                "ticket_id": ticket_id,
+                "approval_status": result.get("approval_status"),
+                "message": result.get("message"),
+                "time_remaining": result.get("time_remaining"),
+                "is_approved": result.get("is_approved"),
+                "is_rejected": result.get("is_rejected"),
+                "request_details": result.get("approval_request", {})
+            }
+        else:
+            return {
+                "status": result.get("status", "error"),
+                "message": result.get("message", "Unknown error"),
+                "ticket_id": ticket_id
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting ticket status: {e}")
+        return {
+            "status": "error",
+            "message": f"Status check failed: {str(e)}",
+            "ticket_id": ticket_id
+        }
 
 # WebSocket endpoint for real-time query communication
 @app.websocket("/ws/query")
