@@ -1,76 +1,70 @@
 """
 PostgreSQL AI Agent MVP - Orchestrator Agent
-Entry point and workflow coordinator for the AI agent system
+Enhanced orchestrator with Gemini AI integration and unified workflow routing
 """
 
-from typing import Dict, Any, Optional
 import logging
-import json
+from typing import Dict, Any, Optional
 from utils.gemini_client import get_gemini_client
 
-# Import workflows
-from workflows.select_query_flow import select_query_workflow
+# Import workflows - Updated for P3.T4.2
+from workflows.unified_query_flow import unified_query_workflow
 
 logger = logging.getLogger(__name__)
 
 class OrchestratorAgent:
     """
-    Orchestrator Agent - Entry point and workflow coordinator
-    
-    Responsibilities:
-    - User input processing and intent extraction
-    - Agent coordination and task delegation
-    - Workflow planning based on query type
-    - Response aggregation and user communication
-    - Error handling and recovery coordination
-    - Session context management
+    Enhanced orchestrator agent that processes user queries and routes them to appropriate workflows
+    Uses Gemini AI for intent extraction with fallback to basic rules
     """
     
     def __init__(self):
-        """Initialize the Orchestrator Agent"""
-        self.session_context = {}
+        """Initialize the orchestrator agent"""
         self.gemini_client = get_gemini_client()
-        logger.info("OrchestratorAgent initialized with Gemini AI integration")
+        self.session_contexts = {}
+        logger.info("Enhanced OrchestratorAgent initialized with Gemini AI integration")
     
     async def process_query(self, user_query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Main entry point for processing user queries
+        Process a user query and route it to the appropriate workflow
         
         Args:
             user_query: Natural language query from user
             session_id: Optional session identifier for context
             
         Returns:
-            Dict containing the response and metadata
+            Dict containing query results and metadata
         """
+        logger.info(f"Processing query: {user_query[:100]}...")
+        
         try:
-            logger.info(f"Processing query: {user_query}")
-            
-            # Step 1: Extract intent from user query using Gemini AI
+            # Step 1: Extract intent using Gemini AI
             intent = await self.extract_intent(user_query)
-            logger.info(f"Extracted intent: {intent}")
+            logger.info(f"Intent extracted: {intent['type']} (confidence: {intent['confidence']})")
             
-            # Step 2: Route based on intent type
-            if intent["type"] == "SELECT":
-                response = await self._handle_select_query(user_query, intent)
-            elif intent["type"] in ["UPDATE", "DELETE", "INSERT"]:
-                response = await self._handle_destructive_query(user_query, intent)
-            else:
-                response = await self._handle_unknown_query(user_query, intent)
+            # Step 2: P3.T4.2 - Use unified workflow for all queries
+            # This allows conditional routing AFTER query building
+            logger.info("Routing to unified workflow for conditional routing after query building")
+            result = await unified_query_workflow.run(user_query, intent)
             
-            return response
+            # Add orchestrator metadata
+            result["orchestrator_intent"] = intent
+            result["gemini_used"] = not intent.get("fallback_used", False)
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             return {
                 "status": "error",
-                "message": f"Failed to process query: {str(e)}",
-                "query": user_query
+                "message": f"Query processing failed: {str(e)}",
+                "query": user_query,
+                "workflow": "orchestrator_error"
             }
-    
+
     async def extract_intent(self, user_query: str) -> Dict[str, Any]:
         """
-        Extract intent from user query using Gemini AI
+        Extract intent from user query using Gemini AI with fallback
         
         Args:
             user_query: Natural language query
@@ -79,24 +73,44 @@ class OrchestratorAgent:
             Dict containing intent information
         """
         try:
-            logger.info("Extracting intent using Gemini AI")
+            # Try Gemini AI first
+            prompt = f"""
+            Analyze this database query and extract the intent. Return a JSON object with:
+            - type: The SQL operation type (SELECT, UPDATE, DELETE, INSERT, or UNKNOWN)
+            - confidence: Float between 0.0 and 1.0 indicating confidence in classification
+            - keywords: Array of important keywords from the query
+            - table_mentioned: The main table name mentioned (if any)
+            - operation_type: Either "READ" for SELECT or "WRITE" for modifications
             
-            # Use Gemini client for intent extraction
-            intent_data = await self.gemini_client.extract_intent(user_query)
+            Query: "{user_query}"
             
-            # Map Gemini response to our expected format
-            intent = {
-                "type": intent_data.get("intent", "UNKNOWN"),
-                "confidence": intent_data.get("confidence", 0.0),
-                "original_query": user_query,
-                "keywords": intent_data.get("keywords", []),
-                "table_mentioned": intent_data.get("table_mentioned"),
-                "operation_type": intent_data.get("operation_type", "UNKNOWN"),
-                "gemini_response": intent_data  # Keep original for debugging
-            }
+            Return only the JSON object, no other text.
+            """
             
-            logger.info(f"Gemini intent extraction successful: {intent['type']} (confidence: {intent['confidence']})")
-            return intent
+            response = await self.gemini_client.generate_content(prompt)
+            
+            if response and response.get("status") == "success":
+                # Parse the JSON response
+                import json
+                intent_text = response.get("content", "").strip()
+                
+                # Remove any markdown formatting
+                if intent_text.startswith("```json"):
+                    intent_text = intent_text.replace("```json", "").replace("```", "").strip()
+                elif intent_text.startswith("```"):
+                    intent_text = intent_text.replace("```", "").strip()
+                
+                intent = json.loads(intent_text)
+                
+                # Validate and enhance the intent
+                intent["original_query"] = user_query
+                intent["fallback_used"] = False
+                
+                logger.info(f"Gemini intent extraction successful: {intent['type']}")
+                return intent
+            else:
+                logger.warning(f"Gemini API returned unsuccessful response: {response}")
+                raise Exception("Gemini API unsuccessful response")
             
         except Exception as e:
             logger.error(f"Error extracting intent with Gemini: {e}")
@@ -153,96 +167,13 @@ class OrchestratorAgent:
         words = query.split()
         keywords = [word for word in words if word not in common_words and len(word) > 2]
         return keywords
-    
-    async def _handle_select_query(self, user_query: str, intent: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle SELECT queries using enhanced LangGraph workflow"""
-        logger.info("Handling SELECT query with enhanced LangGraph workflow")
-        
-        try:
-            # Run the SELECT query workflow with enhanced intent
-            workflow_result = await select_query_workflow.run(user_query, intent)
-            
-            # Format the response for the client
-            if workflow_result.get("status") == "success":
-                results = workflow_result.get("results", {})
-                
-                return {
-                    "status": results.get("status", "success"),
-                    "type": "SELECT",
-                    "message": results.get("message", "Query executed successfully"),
-                    "query": user_query,
-                    "sql_query": workflow_result.get("sql_query", ""),
-                    "data": results.get("data", []),
-                    "metadata": results.get("metadata", {}),
-                    "intent": intent,
-                    "workflow": "enhanced_langgraph_select",
-                    "gemini_used": not intent.get("fallback_used", False)
-                }
-            else:
-                return {
-                    "status": "error",
-                    "type": "SELECT",
-                    "message": workflow_result.get("message", "Workflow execution failed"),
-                    "query": user_query,
-                    "intent": intent,
-                    "workflow": "enhanced_langgraph_select"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error in SELECT query workflow: {e}")
-            return {
-                "status": "error",
-                "type": "SELECT",
-                "message": f"Workflow error: {str(e)}",
-                "query": user_query,
-                "intent": intent
-            }
-    
-    async def _handle_destructive_query(self, user_query: str, intent: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle UPDATE/DELETE/INSERT queries (require approval)"""
-        logger.info(f"Handling destructive query: {intent['type']}")
-        
-        # For now, return a placeholder response
-        # This will be enhanced when we implement the Impact Analysis Agent
-        return {
-            "status": "pending_approval",
-            "type": intent["type"],
-            "message": f"{intent['type']} query requires approval (not yet implemented)",
-            "query": user_query,
-            "intent": intent,
-            "gemini_used": not intent.get("fallback_used", False)
-        }
-    
-    async def _handle_unknown_query(self, user_query: str, intent: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle queries with unknown intent"""
-        logger.info("Handling unknown query type")
-        
-        # Provide helpful guidance for unknown queries
-        if intent.get("confidence", 0) < 0.3:
-            message = "I'm not sure what you're trying to do. Please try rephrasing your query or use more specific SQL-like language."
-        else:
-            message = f"I detected a {intent['type']} operation but it's not fully supported yet. Please try a SELECT query or provide a direct SQL statement."
-        
-        return {
-            "status": "error",
-            "type": intent["type"],
-            "message": message,
-            "query": user_query,
-            "intent": intent,
-            "suggestions": [
-                "Try: 'show me all users'",
-                "Try: 'SELECT * FROM table_name'",
-                "Try: 'get the count of records in users table'"
-            ],
-            "gemini_used": not intent.get("fallback_used", False)
-        }
-    
+
     def get_session_context(self, session_id: str) -> Dict[str, Any]:
         """Get session context for a given session ID"""
-        return self.session_context.get(session_id, {})
+        return self.session_contexts.get(session_id, {})
     
     def update_session_context(self, session_id: str, context: Dict[str, Any]):
         """Update session context for a given session ID"""
-        if session_id not in self.session_context:
-            self.session_context[session_id] = {}
-        self.session_context[session_id].update(context) 
+        if session_id not in self.session_contexts:
+            self.session_contexts[session_id] = {}
+        self.session_contexts[session_id].update(context) 

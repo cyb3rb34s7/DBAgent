@@ -19,7 +19,7 @@ class RedisClient:
     
     def __init__(self):
         """Initialize Redis client"""
-        self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self.redis_url = os.getenv("REDIS_URL")
         
         try:
             # Create Redis connection
