@@ -5,63 +5,64 @@ This document provides comprehensive flow diagrams for the PostgreSQL AI Agent M
 ## 🏗️ System Architecture Overview
 
 ```mermaid
-graph TB
+flowchart TD
     subgraph "Client Layer"
-        WS[WebSocket Client]
-        API[REST API Client]
+        WS["WebSocket Client"]
+        API["REST API Client"]
     end
-    
+
     subgraph "FastAPI Server"
-        HEALTH[/health endpoint]
-        WSE[WebSocket /ws/query]
-        APPROVE[/approve/{ticket_id}]
-        REJECT[/reject/{ticket_id}]
-        STATUS[/status/{ticket_id}]
+        HEALTH["health endpoint"]
+        WSE["WebSocket /ws/query"]
+        APPROVE["/approve/{ticket_id}"]
+        REJECT["/reject/{ticket_id}"]
+        STATUS["/status/{ticket_id}"]
     end
-    
+
     subgraph "Agent Layer"
-        ORCH[OrchestratorAgent]
-        QB[QueryBuilderAgent]
-        IA[ImpactAnalysisAgent]
+        ORCH["OrchestratorAgent"]
+        QB["QueryBuilderAgent"]
+        IA["ImpactAnalysisAgent"]
     end
-    
+
     subgraph "Tool Layer (MCP Servers)"
-        MCP1[MCP Server 1<br/>Database Operations]
-        MCP2[MCP Server 2<br/>Impact & Execution]
+        MCP1["MCP Server 1 - Database Operations"]
+        MCP2["MCP Server 2 - Impact & Execution"]
     end
-    
+
     subgraph "LangGraph Workflow"
-        LG[LangGraph StateGraph]
+        LG["LangGraph StateGraph"]
     end
-    
+
     subgraph "External Services"
-        GEMINI[Gemini AI API]
-        PG[PostgreSQL Database]
-        REDIS[Redis Cache]
+        GEMINI["Gemini AI API"]
+        PG["PostgreSQL Database"]
+        REDIS["Redis Cache"]
     end
-    
+
     WS --> WSE
     API --> APPROVE
     API --> REJECT
     API --> STATUS
-    
+
     WSE --> ORCH
     APPROVE --> MCP2
     REJECT --> MCP2
     STATUS --> MCP2
-    
+
     ORCH --> LG
     LG --> QB
     LG --> IA
     LG --> MCP1
     LG --> MCP2
-    
+
     QB --> GEMINI
     IA --> GEMINI
     MCP1 --> PG
     MCP1 --> REDIS
     MCP2 --> PG
     MCP2 --> REDIS
+
 ```
 
 ## 🔄 Complete Query Processing Flow
