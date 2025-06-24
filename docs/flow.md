@@ -65,64 +65,66 @@ flowchart TD
 
 ```
 
-## 🔄 Complete Query Processing Flow
+## 🔄 Complete Query Processing Flow (Unified Workflow)
 
 ```mermaid
 flowchart TD
-    START([User Query Input]) --> INTENT{Query Type?}
+    START([User Query Input]) --> ORCHESTRATOR[Orchestrator Agent]
+    ORCHESTRATOR --> EXTRACT_INTENT[Extract Intent<br/>Gemini AI + Fallback]
+    EXTRACT_INTENT --> UNIFIED_FLOW[Unified Query Workflow]
     
-    INTENT -->|SELECT| SELECT_FLOW[SELECT Query Flow]
-    INTENT -->|UPDATE/DELETE/INSERT| DESTRUCTIVE_FLOW[Destructive Query Flow]
-    
-    subgraph "SELECT Query Flow"
-        SELECT_FLOW --> EXTRACT[Extract Intent<br/>Gemini AI]
-        EXTRACT --> SCHEMA[Fetch Schema Context<br/>Redis Cached]
-        SCHEMA --> BUILD[Build SQL Query<br/>Gemini AI]
-        BUILD --> VALIDATE[Validate Query<br/>Security Checks]
-        VALIDATE --> EXECUTE[Execute SELECT<br/>PostgreSQL]
-        EXECUTE --> RESULTS[Return Results]
+    subgraph "Unified Query Workflow - All Queries Follow Same Path"
+        UNIFIED_FLOW --> FETCH_SCHEMA[Fetch Schema Context<br/>Redis Cached]
+        FETCH_SCHEMA --> BUILD_QUERY[Build SQL Query<br/>QueryBuilderAgent + Gemini]
+        BUILD_QUERY --> VALIDATE_QUERY[Validate Query<br/>Security Checks]
+        VALIDATE_QUERY --> DETERMINE_TYPE[Determine Query Type<br/>Analyze Built SQL]
+        
+        DETERMINE_TYPE --> ROUTE_DECISION{Query Type?}
+        
+        ROUTE_DECISION -->|SELECT| EXECUTE_SELECT[Execute SELECT<br/>PostgreSQL]
+        ROUTE_DECISION -->|UPDATE/DELETE/INSERT| ANALYZE_IMPACT[Analyze Impact<br/>ImpactAnalysisAgent]
+        
+        EXECUTE_SELECT --> SELECT_RESULTS[Return SELECT Results]
+        
+        ANALYZE_IMPACT --> CHECK_APPROVAL[Check Approval Required<br/>Risk Assessment]
+        CHECK_APPROVAL --> APPROVAL_DECISION{Approval Needed?}
+        
+        APPROVAL_DECISION -->|Auto Approve| EXECUTE_DESTRUCTIVE[Execute Destructive Query<br/>Transaction Wrapped]
+        APPROVAL_DECISION -->|Require Approval| CREATE_TICKET[Create Approval Request<br/>Redis Ticket]
+        
+        CREATE_TICKET --> WAIT_APPROVAL[Wait for Human Approval]
+        WAIT_APPROVAL --> CHECK_STATUS{Approval Status?}
+        
+        CHECK_STATUS -->|Approved| EXECUTE_DESTRUCTIVE
+        CHECK_STATUS -->|Rejected| REJECTED[Query Rejected]
+        CHECK_STATUS -->|Pending| WAIT_APPROVAL
+        CHECK_STATUS -->|Expired| EXPIRED[Request Expired]
+        
+        EXECUTE_DESTRUCTIVE --> EXEC_RESULT{Success?}
+        EXEC_RESULT -->|Success| COMMIT_SUCCESS[COMMIT Transaction]
+        EXEC_RESULT -->|Error| ROLLBACK_ERROR[ROLLBACK Transaction]
+        
+        COMMIT_SUCCESS --> DESTRUCTIVE_SUCCESS[Execution Success]
+        ROLLBACK_ERROR --> DESTRUCTIVE_ERROR[Execution Failed]
     end
     
-    subgraph "Destructive Query Flow"
-        DESTRUCTIVE_FLOW --> EXTRACT2[Extract Intent<br/>Gemini AI]
-        EXTRACT2 --> IMPACT[Analyze Impact<br/>Risk Assessment]
-        IMPACT --> RISK{Risk Level?}
-        
-        RISK -->|LOW/MEDIUM| AUTO_APPROVE[Auto Approve]
-        RISK -->|HIGH/CRITICAL| APPROVAL[Create Approval Request<br/>Redis Ticket]
-        
-        APPROVAL --> WAIT[Wait for Human Approval]
-        WAIT --> CHECK{Approved?}
-        CHECK -->|No| REJECTED[Query Rejected]
-        CHECK -->|Yes| APPROVED[Query Approved]
-        
-        AUTO_APPROVE --> SAFE_EXEC
-        APPROVED --> SAFE_EXEC[Safe Execution<br/>Transaction Wrapped]
-        
-        SAFE_EXEC --> COMMIT{Success?}
-        COMMIT -->|Yes| COMMIT_TX[COMMIT Transaction]
-        COMMIT -->|No| ROLLBACK[ROLLBACK Transaction]
-        
-        COMMIT_TX --> SUCCESS[Execution Success]
-        ROLLBACK --> ERROR[Execution Failed]
-    end
-    
-    RESULTS --> END([Response to User])
-    SUCCESS --> END
-    ERROR --> END
+    SELECT_RESULTS --> END([Response to User])
+    DESTRUCTIVE_SUCCESS --> END
+    DESTRUCTIVE_ERROR --> END
     REJECTED --> END
+    EXPIRED --> END
 ```
 
-## 🤖 Agent Interaction Flow
+## 🤖 Agent Interaction Flow (Unified Workflow)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant WS as WebSocket
     participant Orch as OrchestratorAgent
+    participant UWF as UnifiedQueryWorkflow
     participant QB as QueryBuilderAgent
     participant IA as ImpactAnalysisAgent
-    participant LG as LangGraph
     participant DB as Database
     participant Redis
     participant Gemini as Gemini AI
@@ -133,34 +135,49 @@ sequenceDiagram
     Orch->>Gemini: extract_intent()
     Gemini-->>Orch: Intent JSON
     
-    alt SELECT Query
-        Orch->>LG: Start SELECT workflow
-        LG->>Redis: fetch_schema_context()
-        Redis-->>LG: Schema (cached)
-        LG->>QB: build_sql_query()
-        QB->>Gemini: Generate SQL
-        Gemini-->>QB: SQL Query
-        QB-->>LG: Validated SQL
-        LG->>DB: execute_select_query()
-        DB-->>LG: Results
-        LG-->>Orch: Final Results
-    else Destructive Query
-        Orch->>LG: Start Destructive workflow
-        LG->>IA: analyze_query_impact()
+    Note over Orch,UWF: All queries use unified workflow
+    Orch->>UWF: unified_query_workflow.run()
+    
+    UWF->>Redis: fetch_schema_context()
+    Redis-->>UWF: Schema (cached)
+    
+    UWF->>QB: build_sql_query()
+    QB->>Gemini: Generate SQL
+    Gemini-->>QB: SQL Query
+    QB-->>UWF: Validated SQL
+    
+    UWF->>UWF: determine_query_type()
+    Note over UWF: Analyze built SQL to determine type
+    
+    alt SELECT Query Path
+        UWF->>DB: execute_select_query()
+        DB-->>UWF: SELECT Results
+        UWF-->>Orch: Query Results
+    else Destructive Query Path
+        UWF->>IA: analyze_query_impact()
         IA->>Gemini: Generate recommendations
         Gemini-->>IA: Safety recommendations
         IA->>DB: EXPLAIN analysis
         DB-->>IA: Impact estimates
-        IA-->>LG: Risk assessment
+        IA-->>UWF: Risk assessment
         
-        alt High Risk
-            LG->>Redis: create_approval_request()
-            Redis-->>LG: Ticket ID
-            LG-->>Orch: Approval Required
-        else Low Risk
-            LG->>DB: execute_approved_query()
-            DB-->>LG: Execution results
-            LG-->>Orch: Success/Error
+        alt Auto Approve (Low Risk)
+            UWF->>DB: execute_approved_query()
+            DB-->>UWF: Execution results
+            UWF-->>Orch: Success/Error
+        else Require Approval (High Risk)
+            UWF->>Redis: create_approval_request()
+            Redis-->>UWF: Ticket ID
+            UWF->>UWF: wait_approval()
+            Note over UWF: Human-in-the-loop approval
+            
+            alt Approved
+                UWF->>DB: execute_approved_query()
+                DB-->>UWF: Execution results
+                UWF-->>Orch: Success/Error
+            else Rejected/Expired
+                UWF-->>Orch: Query Rejected/Expired
+            end
         end
     end
     
@@ -168,30 +185,13 @@ sequenceDiagram
     WS-->>User: Results/Status
 ```
 
-## 🔀 LangGraph State Management
+## 🔀 LangGraph State Management (Unified Workflow)
 
 ```mermaid
 stateDiagram-v2
     [*] --> START
     
-    START --> extract_intent : User Query
-    
-    state extract_intent {
-        [*] --> gemini_extraction
-        gemini_extraction --> intent_parsed
-        intent_parsed --> [*]
-    }
-    
-    extract_intent --> route_decision : Intent Available
-    
-    state route_decision {
-        [*] --> check_query_type
-        check_query_type --> select_route : SELECT
-        check_query_type --> destructive_route : UPDATE/DELETE/INSERT
-    }
-    
-    route_decision --> fetch_schema : SELECT Route
-    route_decision --> analyze_impact : Destructive Route
+    START --> fetch_schema : User Query + Intent
     
     state fetch_schema {
         [*] --> redis_lookup
@@ -221,7 +221,19 @@ stateDiagram-v2
         complexity_analysis --> [*]
     }
     
-    validate_query --> execute_select
+    validate_query --> determine_query_type
+    
+    state determine_query_type {
+        [*] --> analyze_sql
+        analyze_sql --> classify_operation
+        classify_operation --> set_query_type
+        set_query_type --> [*]
+    }
+    
+    determine_query_type --> query_type_router : Query Type Determined
+    
+    query_type_router --> execute_select : SELECT
+    query_type_router --> analyze_impact : UPDATE/DELETE/INSERT
     
     state execute_select {
         [*] --> db_connection
@@ -540,4 +552,29 @@ flowchart TD
     CONTINUE --> RESPONSE[Send Response to User]
 ```
 
-This comprehensive flow documentation provides a complete view of the PostgreSQL AI Agent MVP system architecture, showing how the various components interact, the decision pathways, and the safety mechanisms in place. 
+## 🔗 Unified Workflow Architecture Summary
+
+The PostgreSQL AI Agent MVP now uses a **unified query workflow** that processes all queries through the same pipeline, with conditional routing happening AFTER query building rather than at the beginning. This architecture provides several advantages:
+
+### Key Features:
+1. **Single Entry Point**: All queries go through `unified_query_workflow.run()`
+2. **Late Binding**: Query type determination happens after SQL generation
+3. **Consistent Processing**: Same schema fetching, query building, and validation for all queries
+4. **Conditional Routing**: Smart routing based on actual SQL analysis, not just intent
+5. **Human-in-the-Loop**: Seamless approval workflow for destructive operations
+
+### Workflow Nodes:
+- `fetch_schema` → `build_query` → `validate_query` → `determine_query_type`
+- **SELECT Path**: `execute_select` → END
+- **Destructive Path**: `analyze_impact` → `check_approval_required` → [conditional routing]
+  - Auto-approve: `execute_destructive` → END
+  - Require approval: `create_approval` → `wait_approval` → [status-based routing]
+
+### State Management:
+The `UnifiedQueryState` maintains all necessary data throughout the workflow, including:
+- Query building artifacts (SQL, validation, type)
+- SELECT execution results
+- Destructive query handling (impact analysis, approval tickets, execution results)
+- Workflow metadata and error handling
+
+This comprehensive flow documentation provides a complete view of the PostgreSQL AI Agent MVP system architecture, showing how the unified workflow processes all queries through consistent pathways with appropriate safety mechanisms.
