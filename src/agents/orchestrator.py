@@ -89,10 +89,10 @@ class OrchestratorAgent:
             
             response = await self.gemini_client.generate_content(prompt)
             
-            if response and response.get("status") == "success":
+            if response:
                 # Parse the JSON response
                 import json
-                intent_text = response.get("content", "").strip()
+                intent_text = response.strip()
                 
                 # Remove any markdown formatting
                 if intent_text.startswith("```json"):
@@ -109,8 +109,8 @@ class OrchestratorAgent:
                 logger.info(f"Gemini intent extraction successful: {intent['type']}")
                 return intent
             else:
-                logger.warning(f"Gemini API returned unsuccessful response: {response}")
-                raise Exception("Gemini API unsuccessful response")
+                logger.warning("Gemini API returned empty response")
+                raise Exception("Gemini API empty response")
             
         except Exception as e:
             logger.error(f"Error extracting intent with Gemini: {e}")

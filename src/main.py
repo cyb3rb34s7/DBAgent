@@ -2,12 +2,14 @@
 PostgreSQL AI Agent MVP - Main FastAPI Application
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import Dict, Any
 import logging
 import os
 import json
+import traceback
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
@@ -57,6 +59,73 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# P4.T1.1: Global Exception Handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Global exception handler to catch unhandled errors and return standardized error responses
+    
+    Args:
+        request: The incoming request
+        exc: The unhandled exception
+        
+    Returns:
+        JSONResponse with standardized error format
+    """
+    # Log the full exception with traceback for debugging
+    logger.error(f"Unhandled exception on {request.method} {request.url}")
+    logger.error(f"Exception: {exc}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    # Determine error type and status code
+    if isinstance(exc, HTTPException):
+        status_code = exc.status_code
+        error_type = "http_error"
+        message = exc.detail
+    elif isinstance(exc, ValueError):
+        status_code = 400
+        error_type = "validation_error"
+        message = f"Invalid input: {str(exc)}"
+    elif isinstance(exc, ConnectionError):
+        status_code = 503
+        error_type = "connection_error"
+        message = "Service temporarily unavailable"
+    elif isinstance(exc, TimeoutError):
+        status_code = 504
+        error_type = "timeout_error"
+        message = "Request timeout"
+    else:
+        status_code = 500
+        error_type = "internal_error"
+        message = "An unexpected error occurred"
+    
+    # Create standardized error response
+    error_response = {
+        "status": "error",
+        "error_type": error_type,
+        "message": message,
+        "timestamp": "current_timestamp",
+        "path": str(request.url),
+        "method": request.method,
+        "details": {
+            "exception_class": exc.__class__.__name__,
+            "exception_message": str(exc)
+        }
+    }
+    
+    # Add debug information in development
+    debug_mode = os.getenv("DEBUG", "False").lower() == "true"
+    if debug_mode:
+        error_response["debug"] = {
+            "traceback": traceback.format_exc(),
+            "request_headers": dict(request.headers)
+        }
+    
+    return JSONResponse(
+        status_code=status_code,
+        content=error_response
+    )
 
 # Health check endpoint
 @app.get("/health")

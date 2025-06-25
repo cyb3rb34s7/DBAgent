@@ -11,6 +11,13 @@ from pathlib import Path
 
 # Test scripts in recommended execution order
 TEST_SCRIPTS = [
+    # Import tests
+    "test_imports.py",
+    
+    # Unit tests for tools (P4.T2.1)
+    "test_rollback_operation.py",
+    "test_global_exception_handler.py",
+    
     # Core functionality tests
     "test_gemini.py",
     "test_gemini_client.py", 
@@ -87,6 +94,11 @@ def main():
         # Change to tests directory for test execution
         import os
         os.chdir(tests_dir)
+        
+        # Add src directory to Python path for imports
+        src_path = str(tests_dir.parent / "src")
+        if src_path not in sys.path:
+            sys.path.insert(0, src_path)
         
         results = []
         total_start_time = time.time()

@@ -8,6 +8,9 @@ import psycopg2.extras
 from typing import Dict, Any, List, Optional
 import logging
 import os
+import json
+from datetime import datetime, date
+from decimal import Decimal
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from utils.redis_client import get_redis_client
@@ -16,6 +19,39 @@ from utils.redis_client import get_redis_client
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+def serialize_for_json(obj):
+    """
+    Custom JSON serializer for database objects
+    Handles datetime, date, Decimal, and other non-serializable types
+    """
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    elif isinstance(obj, Decimal):
+        return float(obj)
+    elif hasattr(obj, '__dict__'):
+        return str(obj)
+    else:
+        return str(obj)
+
+def make_json_serializable(data):
+    """
+    Recursively convert data to be JSON serializable
+    """
+    if isinstance(data, dict):
+        return {key: make_json_serializable(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [make_json_serializable(item) for item in data]
+    elif isinstance(data, (datetime, date)):
+        return data.isoformat()
+    elif isinstance(data, Decimal):
+        return float(data)
+    elif data is None:
+        return None
+    elif isinstance(data, (str, int, float, bool)):
+        return data
+    else:
+        return str(data)
 
 class DatabaseOperations:
     """Database operations handler for PostgreSQL"""
@@ -331,8 +367,8 @@ class DatabaseOperations:
                     # Fetch results
                     rows = cursor.fetchall()
                     
-                    # Convert to list of dictionaries
-                    results = [dict(row) for row in rows]
+                    # Convert to list of dictionaries and make JSON serializable
+                    results = [make_json_serializable(dict(row)) for row in rows]
                     
                     # Get column information
                     columns = [desc[0] for desc in cursor.description] if cursor.description else []

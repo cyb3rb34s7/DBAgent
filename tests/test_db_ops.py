@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Add src to path so we can import our modules
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from tools.db_ops import execute_select_query, test_database_connection
 

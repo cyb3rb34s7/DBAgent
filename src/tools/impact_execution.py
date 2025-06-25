@@ -748,6 +748,169 @@ class ImpactExecutionOperations:
             return "SELECT"
         else:
             return "UNKNOWN"
+    
+    async def rollback_operation(self, ticket_id: str, operation_info: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        P4.T1.3: Rollback operation tool as a fallback mechanism
+        
+        Args:
+            ticket_id: Unique ticket identifier for the operation to rollback
+            operation_info: Information about the operation to rollback
+            
+        Returns:
+            Dict containing rollback results
+        """
+        try:
+            logger.warning(f"Rollback operation requested for ticket: {ticket_id}")
+            
+            # Step 1: Log the rollback request
+            rollback_info = {
+                "ticket_id": ticket_id,
+                "rollback_requested_at": datetime.utcnow().isoformat(),
+                "operation_info": operation_info or {},
+                "rollback_method": "logging_fallback",
+                "status": "logged"
+            }
+            
+            # Step 2: Try to get the original approval request for context
+            try:
+                status_check = await self.check_approval_status(ticket_id)
+                if status_check.get("status") == "found":
+                    approval_request = status_check.get("approval_request", {})
+                    rollback_info["original_query"] = approval_request.get("sql_query", "unknown")
+                    rollback_info["risk_level"] = approval_request.get("metadata", {}).get("risk_level", "unknown")
+                    rollback_info["affected_tables"] = approval_request.get("metadata", {}).get("affected_tables", [])
+            except Exception as e:
+                logger.error(f"Could not retrieve original request info for rollback: {e}")
+                rollback_info["retrieval_error"] = str(e)
+            
+            # Step 3: Log detailed rollback information
+            logger.critical(f"ROLLBACK OPERATION LOGGED:")
+            logger.critical(f"  Ticket ID: {ticket_id}")
+            logger.critical(f"  Original Query: {rollback_info.get('original_query', 'unknown')}")
+            logger.critical(f"  Risk Level: {rollback_info.get('risk_level', 'unknown')}")
+            logger.critical(f"  Affected Tables: {rollback_info.get('affected_tables', [])}")
+            logger.critical(f"  Rollback Reason: {operation_info.get('reason', 'not specified')}")
+            logger.critical(f"  Requested By: {operation_info.get('requested_by', 'system')}")
+            
+            # Step 4: Store rollback log in Redis for audit trail
+            if self.redis_client.is_connected():
+                try:
+                    redis_key = f"rollback_log:{ticket_id}"
+                    success = self.redis_client.redis_client.setex(
+                        redis_key, 
+                        604800,  # 7 days in seconds
+                        json.dumps(rollback_info, default=str)
+                    )
+                    
+                    if success:
+                        logger.info(f"Rollback log stored in Redis for ticket {ticket_id}")
+                        rollback_info["redis_logged"] = True
+                    else:
+                        logger.warning(f"Failed to store rollback log in Redis for ticket {ticket_id}")
+                        rollback_info["redis_logged"] = False
+                except Exception as e:
+                    logger.error(f"Error storing rollback log in Redis: {e}")
+                    rollback_info["redis_error"] = str(e)
+                    rollback_info["redis_logged"] = False
+            else:
+                rollback_info["redis_logged"] = False
+                logger.warning("Redis not available for rollback logging")
+            
+            # Step 5: Generate rollback recommendations
+            rollback_recommendations = self._generate_rollback_recommendations(rollback_info)
+            rollback_info["recommendations"] = rollback_recommendations
+            
+            # Step 6: Update ticket status to indicate rollback requested
+            try:
+                await self.update_approval_status(
+                    ticket_id,
+                    "ROLLBACK_REQUESTED",
+                    operation_info or {},
+                    f"Rollback operation logged. Manual intervention required."
+                )
+                rollback_info["ticket_updated"] = True
+            except Exception as e:
+                logger.error(f"Could not update ticket status for rollback: {e}")
+                rollback_info["ticket_update_error"] = str(e)
+                rollback_info["ticket_updated"] = False
+            
+            return {
+                "status": "logged",
+                "message": "Rollback operation has been logged. Manual intervention required for actual rollback.",
+                "ticket_id": ticket_id,
+                "rollback_info": rollback_info,
+                "action_required": "Manual database rollback or restore from backup may be needed",
+                "contact": "Database administrator should be contacted immediately"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in rollback operation: {e}")
+            return {
+                "status": "error",
+                "message": f"Rollback operation failed: {str(e)}",
+                "ticket_id": ticket_id,
+                "error_type": "rollback_error"
+            }
+    
+    def _generate_rollback_recommendations(self, rollback_info: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate rollback recommendations based on the operation
+        
+        Args:
+            rollback_info: Information about the rollback request
+            
+        Returns:
+            Dict containing rollback recommendations
+        """
+        recommendations = {
+            "immediate_actions": [],
+            "rollback_strategies": [],
+            "prevention_measures": [],
+            "escalation_required": False
+        }
+        
+        risk_level = rollback_info.get("risk_level", "unknown").upper()
+        original_query = rollback_info.get("original_query", "").upper()
+        
+        # Risk-based recommendations
+        if risk_level in ["HIGH", "CRITICAL"]:
+            recommendations["escalation_required"] = True
+            recommendations["immediate_actions"].extend([
+                "Notify database administrator immediately",
+                "Stop all related operations",
+                "Assess data integrity impact"
+            ])
+        
+        # Query-type specific recommendations
+        if "DELETE" in original_query:
+            recommendations["rollback_strategies"].extend([
+                "Restore deleted data from most recent backup",
+                "Check if soft delete option is available",
+                "Verify referential integrity after restore"
+            ])
+        elif "UPDATE" in original_query:
+            recommendations["rollback_strategies"].extend([
+                "Restore original values from backup",
+                "Use transaction log to identify changed records",
+                "Consider point-in-time recovery if available"
+            ])
+        elif "INSERT" in original_query:
+            recommendations["rollback_strategies"].extend([
+                "Delete inserted records using primary keys",
+                "Check for cascade effects on related tables",
+                "Verify constraint violations after cleanup"
+            ])
+        
+        # General prevention measures
+        recommendations["prevention_measures"].extend([
+            "Review approval workflow for this type of operation",
+            "Implement additional validation checks",
+            "Consider requiring backup verification before execution",
+            "Add rollback testing to approval process"
+        ])
+        
+        return recommendations
 
 # Global instance
 impact_ops = ImpactExecutionOperations()
@@ -778,4 +941,8 @@ async def update_approval_status(ticket_id: str, new_status: str,
 
 async def execute_approved_query(ticket_id: str, executor_info: Dict[str, Any] = None) -> Dict[str, Any]:
     """Execute approved query - tool function"""
-    return await impact_ops.execute_approved_query(ticket_id, executor_info) 
+    return await impact_ops.execute_approved_query(ticket_id, executor_info)
+
+async def rollback_operation(ticket_id: str, operation_info: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Rollback operation - tool function (P4.T1.3)"""
+    return await impact_ops.rollback_operation(ticket_id, operation_info) 
