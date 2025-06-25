@@ -88,7 +88,7 @@ class DatabaseOperations:
     
     async def fetch_schema_context(self, table_names: Optional[List[str]] = None, include_samples: bool = False) -> Dict[str, Any]:
         """
-        Fetch database schema context by inspecting PostgreSQL system catalogs
+        Fetch enhanced database schema context with intelligent entity mapping
         Includes Redis caching with 1-hour TTL to reduce database load
         
         Args:
@@ -96,7 +96,7 @@ class DatabaseOperations:
             include_samples: Whether to include sample data from tables
             
         Returns:
-            Dict containing schema structure, relationships, and optionally sample data
+            Dict containing enhanced schema structure with entity mapping and semantic context
         """
         try:
             # Generate cache key
@@ -114,13 +114,17 @@ class DatabaseOperations:
                         "cached": True
                     }
             
-            logger.info(f"Fetching schema context from database for tables: {table_names or 'all'}")
+            logger.info(f"Fetching enhanced schema context from database for tables: {table_names or 'all'}")
             
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     schema_context = {
                         "tables": {},
                         "relationships": [],
+                        "entity_mappings": {},  # NEW: Intelligent entity mapping
+                        "semantic_context": {},  # NEW: Semantic understanding
+                        "column_value_analysis": {},  # NEW: Column value patterns
+                        "natural_language_guide": {},  # NEW: AI guidance
                         "indexes": {},
                         "constraints": {},
                         "metadata": {
@@ -128,7 +132,8 @@ class DatabaseOperations:
                             "include_samples": include_samples,
                             "filtered_tables": table_names,
                             "cached": False,
-                            "cache_key": cache_key
+                            "cache_key": cache_key,
+                            "enhanced_schema": True
                         }
                     }
                     
@@ -171,7 +176,9 @@ class DatabaseOperations:
                                 "table_type": row['table_type'],
                                 "columns": {},
                                 "primary_keys": [],
-                                "foreign_keys": []
+                                "foreign_keys": [],
+                                "description": f"Table containing {table_name} data",
+                                "estimated_rows": 0
                             }
                         
                         # Add column information
@@ -250,33 +257,19 @@ class DatabaseOperations:
                                 "constraint_name": row['constraint_name']
                             })
                     
-                    # Query 4: Get index information
-                    index_query = f"""
-                    SELECT 
-                        schemaname,
-                        tablename,
-                        indexname,
-                        indexdef
-                    FROM pg_indexes 
-                    WHERE schemaname = 'public'
-                        {table_filter.replace('t.table_name', 'tablename') if table_filter else ''}
-                    ORDER BY tablename, indexname
-                    """
+                    # NEW: Enhanced Analysis - Column Value Analysis
+                    await self._analyze_column_values(cursor, schema_context, table_filter, params)
                     
-                    cursor.execute(index_query, params)
-                    index_rows = cursor.fetchall()
+                    # NEW: Build Entity Mappings
+                    await self._build_entity_mappings(schema_context)
                     
-                    for row in index_rows:
-                        table_name = row['tablename']
-                        if table_name not in schema_context["indexes"]:
-                            schema_context["indexes"][table_name] = []
-                        
-                        schema_context["indexes"][table_name].append({
-                            "index_name": row['indexname'],
-                            "definition": row['indexdef']
-                        })
+                    # NEW: Create Semantic Context
+                    await self._create_semantic_context(schema_context)
                     
-                    # Query 5: Get sample data if requested
+                    # NEW: Generate Natural Language Guide
+                    await self._generate_natural_language_guide(schema_context)
+                    
+                    # Include sample data if requested
                     if include_samples:
                         schema_context["samples"] = {}
                         for table_name in schema_context["tables"].keys():
@@ -284,7 +277,7 @@ class DatabaseOperations:
                                 sample_query = f"SELECT * FROM {table_name} LIMIT 3"
                                 cursor.execute(sample_query)
                                 sample_rows = cursor.fetchall()
-                                schema_context["samples"][table_name] = [dict(row) for row in sample_rows]
+                                schema_context["samples"][table_name] = [make_json_serializable(dict(row)) for row in sample_rows]
                             except Exception as e:
                                 logger.warning(f"Could not fetch samples for table {table_name}: {e}")
                                 schema_context["samples"][table_name] = []
@@ -297,31 +290,258 @@ class DatabaseOperations:
                         cache_success = self.redis_client.cache_schema(cache_key, schema_context, ttl_seconds=3600)
                         schema_context["metadata"]["cached"] = cache_success
                         if cache_success:
-                            logger.info(f"Schema cached successfully with key: {cache_key}")
+                            logger.info(f"Enhanced schema cached successfully with key: {cache_key}")
                     
-                    logger.info(f"Schema context fetched successfully for {len(schema_context['tables'])} tables")
+                    logger.info(f"Enhanced schema context fetched successfully for {len(schema_context['tables'])} tables with entity mappings")
                     
                     return {
                         "status": "success",
                         "schema_context": schema_context,
-                        "message": f"Schema fetched from database for {len(schema_context['tables'])} tables",
+                        "message": f"Enhanced schema fetched from database for {len(schema_context['tables'])} tables",
                         "cached": False
                     }
                     
         except psycopg2.Error as e:
-            logger.error(f"PostgreSQL error fetching schema: {e}")
+            logger.error(f"PostgreSQL error fetching enhanced schema: {e}")
             return {
                 "status": "error",
                 "message": f"Database error: {str(e)}",
                 "error_type": "database_error"
             }
         except Exception as e:
-            logger.error(f"Unexpected error fetching schema: {e}")
+            logger.error(f"Unexpected error fetching enhanced schema: {e}")
             return {
                 "status": "error",
                 "message": f"Unexpected error: {str(e)}",
                 "error_type": "system_error"
             }
+
+    async def _analyze_column_values(self, cursor, schema_context: Dict[str, Any], table_filter: str, params: List[str]):
+        """Analyze column values to understand data patterns and possible values"""
+        for table_name, table_info in schema_context["tables"].items():
+            try:
+                # Get row count
+                cursor.execute(f"SELECT COUNT(*) as row_count FROM {table_name}")
+                row_count = cursor.fetchone()['row_count']
+                schema_context["tables"][table_name]["estimated_rows"] = row_count
+                
+                # Analyze specific columns for patterns
+                for column_name, column_info in table_info["columns"].items():
+                    column_analysis = {
+                        "unique_values": [],
+                        "sample_values": [],
+                        "value_patterns": [],
+                        "is_categorical": False,
+                        "semantic_type": self._infer_semantic_type(column_name, column_info["data_type"])
+                    }
+                    
+                    # For text columns with limited unique values, get all possible values
+                    if column_info["data_type"] in ["text", "varchar", "character varying"] and row_count < 10000:
+                        try:
+                            cursor.execute(f"""
+                                SELECT DISTINCT {column_name} as value, COUNT(*) as count 
+                                FROM {table_name} 
+                                WHERE {column_name} IS NOT NULL 
+                                GROUP BY {column_name} 
+                                ORDER BY count DESC 
+                                LIMIT 20
+                            """)
+                            values = cursor.fetchall()
+                            
+                            if len(values) <= 10:  # Likely categorical
+                                column_analysis["is_categorical"] = True
+                                column_analysis["unique_values"] = [row['value'] for row in values]
+                            else:
+                                column_analysis["sample_values"] = [row['value'] for row in values[:5]]
+                                
+                        except Exception as e:
+                            logger.debug(f"Could not analyze values for {table_name}.{column_name}: {e}")
+                    
+                    # Store analysis
+                    if table_name not in schema_context["column_value_analysis"]:
+                        schema_context["column_value_analysis"][table_name] = {}
+                    schema_context["column_value_analysis"][table_name][column_name] = column_analysis
+                    
+            except Exception as e:
+                logger.debug(f"Could not analyze table {table_name}: {e}")
+
+    async def _build_entity_mappings(self, schema_context: Dict[str, Any]):
+        """Build intelligent entity mappings for natural language understanding"""
+        entity_mappings = {}
+        
+        for table_name, table_info in schema_context["tables"].items():
+            # Table-level mappings
+            table_mappings = {
+                "table_name": table_name,
+                "possible_entities": [table_name],
+                "column_mappings": {}
+            }
+            
+            # Add plural/singular variations
+            if table_name.endswith('s'):
+                table_mappings["possible_entities"].append(table_name[:-1])  # users -> user
+            else:
+                table_mappings["possible_entities"].append(table_name + 's')  # user -> users
+            
+            # Analyze columns for entity mappings
+            for column_name, column_info in table_info["columns"].items():
+                column_mappings = {
+                    "column_name": column_name,
+                    "data_type": column_info["data_type"],
+                    "semantic_type": schema_context["column_value_analysis"].get(table_name, {}).get(column_name, {}).get("semantic_type", "unknown"),
+                    "possible_filters": []
+                }
+                
+                # Special handling for categorical columns
+                if schema_context["column_value_analysis"].get(table_name, {}).get(column_name, {}).get("is_categorical"):
+                    unique_values = schema_context["column_value_analysis"][table_name][column_name]["unique_values"]
+                    column_mappings["categorical_values"] = unique_values
+                    
+                    # Create entity mappings for categorical values
+                    if column_name == "role" and unique_values:
+                        for value in unique_values:
+                            if value:  # Skip None values
+                                # Map "clients" -> "users WHERE role = 'client'"
+                                entity_key = f"{value}s" if not value.endswith('s') else value
+                                if entity_key not in entity_mappings:
+                                    entity_mappings[entity_key] = []
+                                entity_mappings[entity_key].append({
+                                    "table": table_name,
+                                    "filter_condition": f"{column_name} = '{value}'",
+                                    "description": f"All {value}s from {table_name} table"
+                                })
+                                
+                                # Also map singular form
+                                singular_key = value
+                                if singular_key not in entity_mappings:
+                                    entity_mappings[singular_key] = []
+                                entity_mappings[singular_key].append({
+                                    "table": table_name,
+                                    "filter_condition": f"{column_name} = '{value}'",
+                                    "description": f"All {value}s from {table_name} table"
+                                })
+                
+                table_mappings["column_mappings"][column_name] = column_mappings
+            
+            entity_mappings[table_name] = [table_mappings]
+        
+        schema_context["entity_mappings"] = entity_mappings
+
+    async def _create_semantic_context(self, schema_context: Dict[str, Any]):
+        """Create semantic context for better AI understanding"""
+        semantic_context = {
+            "table_purposes": {},
+            "common_queries": {},
+            "relationship_descriptions": []
+        }
+        
+        # Analyze table purposes based on columns
+        for table_name, table_info in schema_context["tables"].items():
+            columns = list(table_info["columns"].keys())
+            
+            # Infer table purpose
+            purpose = f"Stores {table_name} information"
+            if "email" in columns and "password" in [col for col in columns if "password" in col.lower()]:
+                purpose = f"User authentication and profile data"
+            elif "created_at" in columns or "updated_at" in columns:
+                purpose = f"Transactional data with timestamps"
+            
+            semantic_context["table_purposes"][table_name] = purpose
+            
+            # Generate common query patterns
+            common_queries = []
+            if "status" in columns:
+                common_queries.append(f"active {table_name}")
+                common_queries.append(f"inactive {table_name}")
+            if "role" in columns:
+                common_queries.append(f"{table_name} by role")
+            if "created_at" in columns:
+                common_queries.append(f"recent {table_name}")
+                common_queries.append(f"{table_name} created today")
+            
+            semantic_context["common_queries"][table_name] = common_queries
+        
+        # Describe relationships
+        for rel in schema_context["relationships"]:
+            description = f"{rel['source_table']}.{rel['source_column']} references {rel['target_table']}.{rel['target_column']}"
+            semantic_context["relationship_descriptions"].append(description)
+        
+        schema_context["semantic_context"] = semantic_context
+
+    async def _generate_natural_language_guide(self, schema_context: Dict[str, Any]):
+        """Generate natural language guide for AI"""
+        guide = {
+            "available_tables": list(schema_context["tables"].keys()),
+            "entity_resolution": {},
+            "query_examples": {},
+            "important_notes": []
+        }
+        
+        # Entity resolution guide
+        for entity, mappings in schema_context["entity_mappings"].items():
+            if isinstance(mappings, list) and len(mappings) > 0:
+                first_mapping = mappings[0]
+                if isinstance(first_mapping, dict) and "filter_condition" in first_mapping:
+                    guide["entity_resolution"][entity] = {
+                        "maps_to": f"SELECT * FROM {first_mapping['table']} WHERE {first_mapping['filter_condition']}",
+                        "description": first_mapping.get("description", "")
+                    }
+        
+        # Query examples
+        for table_name in schema_context["tables"].keys():
+            examples = [
+                f"show me all {table_name}",
+                f"get {table_name} data",
+                f"list {table_name}"
+            ]
+            
+            # Add status-based examples if status column exists
+            if "status" in schema_context["tables"][table_name]["columns"]:
+                examples.extend([
+                    f"show me active {table_name}",
+                    f"find inactive {table_name}"
+                ])
+            
+            guide["query_examples"][table_name] = examples
+        
+        # Important notes
+        guide["important_notes"] = [
+            "Always use existing table names from the available_tables list",
+            "Use entity_resolution mappings to convert conceptual entities to actual SQL",
+            "Check column_value_analysis for categorical column values",
+            "Consider relationships when joining tables"
+        ]
+        
+        schema_context["natural_language_guide"] = guide
+
+    def _infer_semantic_type(self, column_name: str, data_type: str) -> str:
+        """Infer semantic type from column name and data type"""
+        column_lower = column_name.lower()
+        
+        if "email" in column_lower:
+            return "email"
+        elif "phone" in column_lower:
+            return "phone"
+        elif "password" in column_lower:
+            return "password"
+        elif "status" in column_lower:
+            return "status"
+        elif "role" in column_lower:
+            return "role"
+        elif "created_at" in column_lower or "updated_at" in column_lower:
+            return "timestamp"
+        elif "id" in column_lower:
+            return "identifier"
+        elif "name" in column_lower:
+            return "name"
+        elif data_type in ["timestamp", "timestamptz", "date"]:
+            return "datetime"
+        elif data_type in ["integer", "bigint", "smallint"]:
+            return "numeric"
+        elif data_type in ["text", "varchar", "character varying"]:
+            return "text"
+        else:
+            return "unknown"
 
     async def execute_select_query(self, sql_query: str, limit: int = 1000) -> Dict[str, Any]:
         """

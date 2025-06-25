@@ -233,76 +233,116 @@ class QueryBuilderAgent:
     
     def _format_schema_for_llm(self, schema_context: Dict[str, Any], intent_data: Dict[str, Any]) -> str:
         """
-        Format schema context for LLM consumption
+        Format enhanced schema context for intelligent LLM consumption
         
         Args:
-            schema_context: Raw schema context from database
+            schema_context: Enhanced schema context from database with entity mappings
             intent_data: Intent information to focus on relevant tables
             
         Returns:
-            Formatted schema string for LLM
+            Intelligently formatted schema string for LLM with entity mappings
         """
         try:
+            # Extract enhanced schema components
             tables = schema_context.get('tables', {})
-            relationships = schema_context.get('relationships', [])
+            entity_mappings = schema_context.get('entity_mappings', {})
+            natural_language_guide = schema_context.get('natural_language_guide', {})
+            column_value_analysis = schema_context.get('column_value_analysis', {})
+            semantic_context = schema_context.get('semantic_context', {})
             
-            # Focus on relevant tables based on intent
-            mentioned_table = intent_data.get('table_mentioned')
-            relevant_tables = []
+            schema_lines = ["=== INTELLIGENT DATABASE SCHEMA GUIDE ==="]
             
-            if mentioned_table and mentioned_table in tables:
-                relevant_tables.append(mentioned_table)
-                
-                # Add related tables through foreign keys
-                for rel in relationships:
-                    if rel.get('source_table') == mentioned_table:
-                        relevant_tables.append(rel.get('target_table'))
-                    elif rel.get('target_table') == mentioned_table:
-                        relevant_tables.append(rel.get('source_table'))
-            else:
-                # If no specific table mentioned, include all tables
-                relevant_tables = list(tables.keys())
+            # 1. Available Tables (Critical - AI must use ONLY these)
+            schema_lines.append("\n🏗️ AVAILABLE TABLES (USE ONLY THESE):")
+            available_tables = natural_language_guide.get('available_tables', list(tables.keys()))
+            for table_name in available_tables:
+                estimated_rows = tables.get(table_name, {}).get('estimated_rows', 0)
+                purpose = semantic_context.get('table_purposes', {}).get(table_name, f"Stores {table_name} data")
+                schema_lines.append(f"  ✓ {table_name} ({estimated_rows} rows) - {purpose}")
             
-            # Remove duplicates and limit to reasonable number
-            relevant_tables = list(set(relevant_tables))[:10]  # Limit to 10 tables max
+            # 2. Entity Resolution Guide (Critical for "clients" -> users WHERE role='client')
+            entity_resolution = natural_language_guide.get('entity_resolution', {})
+            if entity_resolution:
+                schema_lines.append("\n🔍 ENTITY RESOLUTION GUIDE (CRITICAL):")
+                schema_lines.append("When user mentions these entities, use the corresponding SQL:")
+                for entity, mapping in entity_resolution.items():
+                    maps_to = mapping.get('maps_to', '')
+                    description = mapping.get('description', '')
+                    schema_lines.append(f"  • '{entity}' → {maps_to}")
+                    if description:
+                        schema_lines.append(f"    ({description})")
             
-            # Format schema
-            schema_lines = ["Database Schema:"]
-            
-            for table_name in relevant_tables:
+            # 3. Detailed Table Structures
+            schema_lines.append("\n📋 TABLE STRUCTURES:")
+            for table_name in available_tables:
                 if table_name in tables:
                     table_info = tables[table_name]
                     columns = table_info.get('columns', {})
                     primary_keys = table_info.get('primary_keys', [])
-                    foreign_keys = table_info.get('foreign_keys', [])
                     
-                    schema_lines.append(f"\nTable: {table_name}")
+                    schema_lines.append(f"\n  📊 Table: {table_name}")
                     
-                    # Add columns
+                    # Add columns with enhanced information
                     for col_name, col_info in columns.items():
                         data_type = col_info.get('data_type', 'unknown')
                         is_nullable = "" if col_info.get('is_nullable', True) else " NOT NULL"
-                        pk_marker = " (PK)" if col_name in primary_keys else ""
+                        pk_marker = " (PRIMARY KEY)" if col_name in primary_keys else ""
                         
-                        schema_lines.append(f"  - {col_name}: {data_type}{is_nullable}{pk_marker}")
-                    
-                    # Add foreign keys
-                    if foreign_keys:
-                        schema_lines.append("  Foreign Keys:")
-                        for fk in foreign_keys:
-                            schema_lines.append(f"    - {fk['source_column']} -> {fk['target_table']}.{fk['target_column']}")
+                        # Get column value analysis
+                        col_analysis = column_value_analysis.get(table_name, {}).get(col_name, {})
+                        semantic_type = col_analysis.get('semantic_type', 'unknown')
+                        
+                        column_line = f"    - {col_name}: {data_type}{is_nullable}{pk_marker}"
+                        
+                        # Add categorical values if available
+                        if col_analysis.get('is_categorical') and col_analysis.get('unique_values'):
+                            values = col_analysis['unique_values']
+                            column_line += f" [VALUES: {', '.join(map(str, values))}]"
+                        elif col_analysis.get('sample_values'):
+                            samples = col_analysis['sample_values'][:3]
+                            column_line += f" [SAMPLES: {', '.join(map(str, samples))}]"
+                        
+                        if semantic_type != 'unknown':
+                            column_line += f" ({semantic_type})"
+                        
+                        schema_lines.append(column_line)
             
-            # Add relationships summary
+            # 4. Query Examples
+            query_examples = natural_language_guide.get('query_examples', {})
+            if query_examples:
+                schema_lines.append("\n💡 QUERY EXAMPLES:")
+                for table_name, examples in query_examples.items():
+                    if examples:
+                        schema_lines.append(f"  For {table_name}:")
+                        for example in examples[:3]:  # Limit to 3 examples per table
+                            schema_lines.append(f"    • \"{example}\"")
+            
+            # 5. Important Rules
+            important_notes = natural_language_guide.get('important_notes', [])
+            if important_notes:
+                schema_lines.append("\n⚠️ CRITICAL RULES:")
+                for i, note in enumerate(important_notes, 1):
+                    schema_lines.append(f"  {i}. {note}")
+            
+            # 6. Relationships (if any)
+            relationships = schema_context.get('relationships', [])
             if relationships:
-                schema_lines.append("\nTable Relationships:")
+                schema_lines.append("\n🔗 TABLE RELATIONSHIPS:")
                 for rel in relationships[:5]:  # Limit to 5 relationships
-                    schema_lines.append(f"  - {rel['source_table']}.{rel['source_column']} -> {rel['target_table']}.{rel['target_column']}")
+                    schema_lines.append(f"  • {rel['source_table']}.{rel['source_column']} → {rel['target_table']}.{rel['target_column']}")
+            
+            # 7. Final Reminder
+            schema_lines.append("\n🎯 REMEMBER:")
+            schema_lines.append("  • NEVER create queries for non-existent tables")
+            schema_lines.append("  • ALWAYS use entity resolution guide for concept mapping")
+            schema_lines.append("  • USE ONLY the available tables listed above")
+            schema_lines.append("  • Check categorical values for exact column values")
             
             return "\n".join(schema_lines)
             
         except Exception as e:
-            logger.error(f"Error formatting schema for LLM: {e}")
-            return f"Error formatting schema: {str(e)}"
+            logger.error(f"Error formatting enhanced schema for LLM: {e}")
+            return f"Error formatting enhanced schema: {str(e)}"
     
     async def _generate_alternative_queries(self, intent_data: Dict[str, Any], formatted_schema: str) -> List[Dict[str, Any]]:
         """

@@ -135,22 +135,26 @@ class UnifiedQueryWorkflow:
         )
     
     async def _fetch_schema_node(self, state: UnifiedQueryState) -> UnifiedQueryState:
-        """Fetch database schema context"""
-        logger.info("Fetching schema context for unified query")
+        """Fetch enhanced database schema context with entity mappings"""
+        logger.info("Fetching enhanced schema context for unified query")
         
         try:
-            # Extract table names from intent if available
-            table_names = []
-            if state["intent"].get("table_mentioned"):
-                table_names.append(state["intent"]["table_mentioned"])
-            
-            # Fetch schema context
-            schema_result = await fetch_schema_context(table_names=table_names)
+            # ALWAYS fetch complete schema with entity mappings
+            # Never limit to specific tables to ensure entity resolution works
+            schema_result = await fetch_schema_context(table_names=None, include_samples=False)
             
             if schema_result.get("status") == "success":
                 state["schema_context"] = schema_result.get("schema_context", {})
                 state["metadata"]["schema_cached"] = schema_result.get("cached", False)
-                logger.info("Schema context fetched successfully")
+                
+                # Log entity mappings for debugging
+                entity_mappings = state["schema_context"].get("entity_mappings", {})
+                if entity_mappings:
+                    logger.info(f"Enhanced schema loaded with {len(entity_mappings)} entity mappings")
+                else:
+                    logger.warning("No entity mappings found in schema context")
+                
+                logger.info("Enhanced schema context fetched successfully")
             else:
                 state["workflow_status"] = "error"
                 state["error_message"] = f"Failed to fetch schema: {schema_result.get('message')}"
@@ -171,10 +175,10 @@ class UnifiedQueryWorkflow:
             if state.get("workflow_status") == "error":
                 return state
             
-            # Build SQL query using QueryBuilderAgent
+            # Build SQL query using QueryBuilderAgent with enhanced schema
             query_result = await self.query_builder.build_sql_query(
                 intent_data=state["intent"],
-                table_names=[state["intent"].get("table_mentioned")] if state["intent"].get("table_mentioned") else None
+                table_names=None  # Always use complete schema with entity mappings
             )
             
             if query_result.get("status") == "success":
