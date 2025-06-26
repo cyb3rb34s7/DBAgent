@@ -2,7 +2,7 @@
 
 This document provides comprehensive flow diagrams for the PostgreSQL AI Agent MVP system, showing the agentic architecture, LangGraph workflows, and data pathways.
 
-## 🏗️ System Architecture Overview
+## 🏗️ System Architecture Overview--
 
 ```mermaid
 flowchart TD
